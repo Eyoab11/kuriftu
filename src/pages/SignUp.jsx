@@ -14,17 +14,25 @@ const SignUp = () => {
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
+    try {
+      console.log('Sending sign-up request:', { email }); // Debug log
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
 
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-    } else {
+      if (error) {
+        console.error('Sign-up error:', error);
+        throw error;
+      }
+
+      console.log('Sign-up success:', data);
       alert('Sign-up successful! Please check your email to confirm.');
       navigate('/login');
+    } catch (err) {
+      setError(err.message || 'An unexpected error occurred');
+    } finally {
+      setLoading(false);
     }
   };
 
