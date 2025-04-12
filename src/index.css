@@ -1,0 +1,19 @@
+/* main.css */
+@import "tailwindcss";
+
+@theme {
+  /* Custom font family */
+  --font-family-futuristic: 'Orbitron', sans-serif;
+  --font-zentry: "zentry", "sans-serif";
+  /* Custom colors */
+  --color-futuristicpurple-400: #a855f7;
+  --color-futuristicpurple-500: #b794f4;
+  --color-futuristicpurple-600: #9333ea;
+  --color-futuristicpurple-700: #8816f0;
+  --color-futuristicpurple-800: #7e22ce;
+  --color-futuristicpurple-900: #6b21a8;
+  --color-cards-100: #0a0b18;
+  
+  /* Dark background color */
+  --color-dark: #0f0f0f;
+}
