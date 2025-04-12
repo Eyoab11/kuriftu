@@ -186,15 +186,16 @@ const FeedbackPage = () => {
           { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `room_id=eq.${roomId}` },
           (payload) => {
             console.log('New message received:', payload); // Debug log
-            setMessages((prev) => [
-              ...prev,
-              {
-                text: payload.new.message,
-                isUser: payload.new.is_user,
-                priority: payload.new.priority,
-              },
-            ]);
+            // Only add admin messages to avoid duplicating user messages
             if (!payload.new.is_user) {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  text: payload.new.message,
+                  isUser: payload.new.is_user,
+                  priority: payload.new.priority,
+                },
+              ]);
               setWaiting(false);
               setReceiveSnackbar(true);
               clickSound.play();
@@ -239,7 +240,7 @@ const FeedbackPage = () => {
         user_id: user.id,
         message: data.feedback,
         is_user: true,
-        priority: data.priority,
+        priority: data.priority || null, // Allow optional priority
       })
       .select()
       .single();
@@ -259,7 +260,7 @@ const FeedbackPage = () => {
       {
         text: data.feedback,
         isUser: true,
-        priority: data.priority,
+        priority: data.priority || null,
       },
     ]);
 
@@ -396,7 +397,7 @@ const FeedbackPage = () => {
       {/* Chat-based Feedback Form */}
       {showChatForm && (
         <motion.div
-          className="relative z-30 flex flex-col h-screen max-w-lg mx-auto bg-gray-900/90 backdrop-blur-sm rounded-lg shadow-xl overflow-hidden mt-0  border border-gray-800"
+          className="relative z-30 flex flex-col h-screen max-w-lg mx-auto bg-gray-900/90 backdrop-blur-sm rounded-lg shadow-xl overflow-hidden mt-0 border border-gray-800"
           initial={{ opacity: 0, y: 50 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 50 }}
