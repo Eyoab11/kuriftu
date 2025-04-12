@@ -23,6 +23,8 @@ const FeedbackPage = () => {
   const sendSound = new Howl({ src: ['/send.mp3'], volume: 0.7 });
   const clickSound = new Howl({ src: ['/click.mp3'], volume: 0.7 });
   const backgroundRef = useRef(null);
+  const chatFormRef = useRef(null); // Ref for chat form
+  const feedbackFormRef = useRef(null); // Ref for feedback form
   const navigate = useNavigate();
 
   // Check authentication on mount
@@ -157,7 +159,6 @@ const FeedbackPage = () => {
   // Real-time subscription for chat messages
   useEffect(() => {
     if (roomId && showChatForm) {
-      // Fetch initial messages for the room
       const fetchMessages = async () => {
         const { data, error } = await supabase
           .from('chat_messages')
@@ -168,7 +169,7 @@ const FeedbackPage = () => {
         if (error) {
           console.error('Error fetching messages:', error);
         } else {
-          console.log('Fetched messages:', data); // Debug log
+          console.log('Fetched messages:', data);
           setMessages(data.map(msg => ({
             text: msg.message,
             isUser: msg.is_user,
@@ -178,15 +179,13 @@ const FeedbackPage = () => {
       };
       fetchMessages();
 
-      // Subscribe to new messages in the room
       const channel = supabase
         .channel(`chat-room-${roomId}`)
         .on(
           'postgres_changes',
           { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `room_id=eq.${roomId}` },
           (payload) => {
-            console.log('New message received:', payload); // Debug log
-            // Only add admin messages to avoid duplicating user messages
+            console.log('New message received:', payload);
             if (!payload.new.is_user) {
               setMessages((prev) => [
                 ...prev,
@@ -213,6 +212,25 @@ const FeedbackPage = () => {
     }
   }, [roomId, showChatForm]);
 
+  // Handle clicks outside forms to close them
+  useEffect(() => {
+    const handleOutsideClick = (event) => {
+      // Close chat form if click is outside
+      if (showChatForm && chatFormRef.current && !chatFormRef.current.contains(event.target)) {
+        setShowChatForm(false);
+      }
+      // Close feedback form if click is outside
+      if (showOneTimeForm && feedbackFormRef.current && !feedbackFormRef.current.contains(event.target)) {
+        setShowOneTimeForm(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [showChatForm, showOneTimeForm]);
+
   const handleChatSubmit = async (data) => {
     if (!roomId || isRoomLoading) {
       console.error('Room not ready');
@@ -232,7 +250,6 @@ const FeedbackPage = () => {
       return;
     }
 
-    // Insert user message
     const { data: insertedData, error: insertError } = await supabase
       .from('chat_messages')
       .insert({
@@ -240,7 +257,7 @@ const FeedbackPage = () => {
         user_id: user.id,
         message: data.feedback,
         is_user: true,
-        priority: data.priority || null, // Allow optional priority
+        priority: data.priority || null,
       })
       .select()
       .single();
@@ -252,9 +269,8 @@ const FeedbackPage = () => {
       return;
     }
 
-    console.log('Inserted message:', insertedData); // Debug log
+    console.log('Inserted message:', insertedData);
 
-    // Append message locally for immediate UI update
     setMessages((prev) => [
       ...prev,
       {
@@ -301,6 +317,7 @@ const FeedbackPage = () => {
         setSendSnackbar(false);
         setRating(null);
         setFeedbackText('');
+        setShowOneTimeForm(false); // Close form after submission
       }, 2000);
     }
   };
@@ -312,6 +329,7 @@ const FeedbackPage = () => {
       return;
     }
     setShowChatForm((prev) => !prev);
+    setShowOneTimeForm(false); // Ensure only one form is open
   };
 
   const handleGiveFeedbackClick = async () => {
@@ -321,6 +339,7 @@ const FeedbackPage = () => {
       return;
     }
     setShowOneTimeForm((prev) => !prev);
+    setShowChatForm(false); // Ensure only one form is open
   };
 
   return (
@@ -341,85 +360,109 @@ const FeedbackPage = () => {
         />
       </div>
 
-      {/* One-Time Feedback Form */}
+      {/* One-Time Feedback Form as Pop-up */}
       {showOneTimeForm && (
-        <motion.div
-          className="relative z-40 w-full max-w-md mx-auto mt-2 sm:mt-4 md:mt-6 bg-gray-900/90 backdrop-blur-sm rounded-lg shadow-xl p-6 border border-gray-800"
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -20 }}
-          transition={{ duration: 0.3 }}
-        >
-          <h2 className="text-xl font-bold text-gray-200 mb-4 text-center">Provide Feedback</h2>
-          <form onSubmit={handleOneTimeSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Rating</label>
-              <div className="flex justify-center space-x-2">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <motion.button
-                    key={star}
-                    type="button"
-                    onClick={() => setRating(star)}
-                    className={`text-2xl ${
-                      rating >= star ? 'text-yellow-500' : 'text-gray-500'
-                    } hover:text-yellow-400`}
-                    whileHover={{ scale: 1.2 }}
-                    whileTap={{ scale: 0.9 }}
-                  >
-                    ★
-                  </motion.button>
-                ))}
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          {/* Blurred Background Overlay */}
+          <motion.div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+          />
+          {/* Feedback Form Pop-up */}
+          <motion.div
+            ref={feedbackFormRef}
+            className="relative w-full max-w-md bg-gray-900/90 backdrop-blur-sm rounded-lg shadow-xl p-6 border border-gray-800"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.3 }}
+          >
+            <h2 className="text-xl font-bold text-gray-200 mb-4 text-center">Provide Feedback</h2>
+            <form onSubmit={handleOneTimeSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Rating</label>
+                <div className="flex justify-center space-x-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <motion.button
+                      key={star}
+                      type="button"
+                      onClick={() => setRating(star)}
+                      className={`text-2xl ${
+                        rating >= star ? 'text-yellow-500' : 'text-gray-500'
+                      } hover:text-yellow-400`}
+                      whileHover={{ scale: 1.2 }}
+                      whileTap={{ scale: 0.9 }}
+                    >
+                      ★
+                    </motion.button>
+                  ))}
+                </div>
               </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Feedback</label>
-              <textarea
-                className="w-full p-2 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400 text-gray-200 bg-gray-700"
-                placeholder="Type your feedback..."
-                value={feedbackText}
-                onChange={(e) => setFeedbackText(e.target.value)}
-                rows="4"
-              />
-            </div>
-            <motion.button
-              type="submit"
-              className="w-full bg-gray-600 text-gray-200 py-2 rounded-lg hover:bg-gray-500 transition duration-200 disabled:opacity-50"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              disabled={!rating || !feedbackText}
-            >
-              Submit
-            </motion.button>
-          </form>
-        </motion.div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Feedback</label>
+                <textarea
+                  className="w-full p-2 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400 text-gray-200 bg-gray-700"
+                  placeholder="Type your feedback..."
+                  value={feedbackText}
+                  onChange={(e) => setFeedbackText(e.target.value)}
+                  rows="4"
+                />
+              </div>
+              <motion.button
+                type="submit"
+                className="w-full bg-gray-600 text-gray-200 py-2 rounded-lg hover:bg-gray-500 transition duration-200 disabled:opacity-50"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                disabled={!rating || !feedbackText}
+              >
+                Submit
+              </motion.button>
+            </form>
+          </motion.div>
+        </div>
       )}
 
-      {/* Chat-based Feedback Form */}
+      {/* Chat-based Feedback Form as Pop-up */}
       {showChatForm && (
-        <motion.div
-          className="relative z-30 flex flex-col h-screen max-w-lg mx-auto bg-gray-900/90 backdrop-blur-sm rounded-lg shadow-xl overflow-hidden mt-0 border border-gray-800"
-          initial={{ opacity: 0, y: 50 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 50 }}
-          transition={{ duration: 0.5 }}
-        >
-          <header className="bg-gradient-to-r from-gray-800 to-gray-900 text-gray-200 p-4 text-center text-xl font-bold shadow-md">
-            Chat with Admin
-          </header>
-          <div className="flex-1 flex flex-col overflow-hidden text-gray-300">
-            {isRoomLoading ? (
-              <div className="flex-1 flex items-center justify-center">
-                <WaitingAnimation />
-              </div>
-            ) : (
-              <>
-                <ChatHistory messages={messages} />
-                {waiting && <WaitingAnimation />}
-                <ChatInput onSubmit={handleChatSubmit} initialRating={rating || null} roomId={roomId} />
-              </>
-            )}
-          </div>
-        </motion.div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          {/* Blurred Background Overlay */}
+          <motion.div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+          />
+          {/* Chat Form Pop-up */}
+          <motion.div
+            ref={chatFormRef}
+            className="relative w-full max-w-lg bg-gray-900/90 backdrop-blur-sm rounded-lg shadow-xl overflow-hidden border border-gray-800"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.3 }}
+          >
+            <header className="bg-gradient-to-r from-gray-800 to-gray-900 text-gray-200 p-4 text-center text-xl font-bold shadow-md">
+              Chat with Admin
+            </header>
+            <div className="flex flex-col h-[500px] text-gray-300">
+              {isRoomLoading ? (
+                <div className="flex-1 flex items-center justify-center">
+                  <WaitingAnimation />
+                </div>
+              ) : (
+                <>
+                  <ChatHistory messages={messages} />
+                  {waiting && <WaitingAnimation />}
+                  <ChatInput onSubmit={handleChatSubmit} initialRating={rating || null} roomId={roomId} />
+                </>
+              )}
+            </div>
+          </motion.div>
+        </div>
       )}
 
       {/* Snackbar notifications */}
@@ -428,7 +471,7 @@ const FeedbackPage = () => {
           initial={{ opacity: 0, x: 50 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: 50 }}
-          className="fixed top-6 right-6 bg-gray-700 text-gray-200 px-4 py-3 rounded-lg shadow-lg z-50 flex items-center space-x-2"
+          className="fixed top-6 right-6 bg-gray-700 text-gray-200 px-4 py-3 rounded-lg shadow-lg z-60 flex items-center space-x-2"
           style={{ maxWidth: 'calc(100% - 2rem)' }}
         >
           <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="#FFD700" strokeWidth="2" viewBox="0 0 24 24">
@@ -442,7 +485,7 @@ const FeedbackPage = () => {
           initial={{ opacity: 0, x: 50 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: 50 }}
-          className="fixed top-6 right-6 bg-gray-700 text-gray-200 px-4 py-3 rounded-lg shadow-lg z-50 flex items-center space-x-2"
+          className="fixed top-6 right-6 bg-gray-700 text-gray-200 px-4 py-3 rounded-lg shadow-lg z-60 flex items-center space-x-2"
           style={{ maxWidth: 'calc(100% - 2rem)' }}
         >
           <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="#FFD700" strokeWidth="2" viewBox="0 0 24 24">
